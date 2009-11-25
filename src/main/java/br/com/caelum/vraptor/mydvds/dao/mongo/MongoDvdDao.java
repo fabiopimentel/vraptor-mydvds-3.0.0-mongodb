@@ -22,9 +22,10 @@ import com.mongodb.ObjectId;
 public class MongoDvdDao implements DvdDao {
 	private DBCollection collectionDvd;
 	private DBCollection collectionCopy;
-	private MongoUserDao userDao;
+	public MongoUserDao userDao;
 
 	public MongoDvdDao(MongoSession session) {
+		this.userDao = new MongoUserDao(session);
 		this.collectionDvd = session.getDvdCollection();
 		this.collectionCopy = session.getDvdCopyCollection();
 	}
@@ -82,10 +83,10 @@ public class MongoDvdDao implements DvdDao {
 	@Override
 	public List<Dvd> searchSimilarTitle(String title) {
 		List<Dvd> dvds = new ArrayList<Dvd>();
-
 		BasicDBObject query = new BasicDBObject();
 		query.put("title", title);
 		DBCursor cursor = this.collectionDvd.find(query);
+		
 
 		if (cursor == null) {
 			throw new IllegalArgumentException("Dvd nao encontrado.");
@@ -102,27 +103,40 @@ public class MongoDvdDao implements DvdDao {
 			dvd.setDescription((String) obj.get("description"));
 			DvdType dvdType = DvdType.valueOf(String.valueOf(obj.get("type")));
 			dvd.setType(dvdType);
+			
+			//preenchendo copies do DVD
+			Set<DvdCopy> copies = searchCopyAndOwners(dvd);
+						
+			dvd.setCopies(copies);
 			dvds.add(dvd);
 		}
 		return dvds;
 	}
 
+	private Set<DvdCopy> searchCopyAndOwners(Dvd dvd) {
+		Set<DvdCopy> copies = new HashSet<DvdCopy>();
+		BasicDBObject query = new BasicDBObject();
+		query.put("dvd_id", dvd.getId1());
+		DBCursor cursor = this.collectionCopy.find(query);
+		
+		
+		if(cursor == null){
+			throw new IllegalArgumentException("Copia do Dvd nao encontrada.");
+		}
 
-	private Dvd createDvd(DBObject resultado) {
+		while (cursor.hasNext()) {
+			BasicDBObject object = (BasicDBObject) cursor.next();
+			DvdCopy dvdCopy = new DvdCopy();
+			
+			User user = userDao.find((String) object.get("owner"));
 
-		Dvd dvd = new Dvd();
-		ObjectId _id = (ObjectId) resultado.get("_id");
-
-		dvd.setId1(_id.toString());
-		dvd.setTitle((String) resultado.get("title"));
-		dvd.setDescription((String) resultado.get("description"));
-		DvdType dvdType = DvdType
-				.valueOf(String.valueOf(resultado.get("type")));
-		dvd.setType(dvdType);
-
-		return dvd;
-
+			dvdCopy.setOwner(user);
+			copies.add(dvdCopy);
+			
+		}
+		return copies;
 	}
+
 
 
 
